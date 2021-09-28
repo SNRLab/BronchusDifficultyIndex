@@ -2,6 +2,8 @@
 
 import vtk
 
+import time
+from pysinewave import SineWave
 
 def get_program_parameters():
     import argparse
@@ -20,34 +22,29 @@ def main():
     filename = get_program_parameters()
 
     # Read all the data from the file
-    reader = vtk.vtkXMLPolyDataReader()
+    reader = vtk.vtkPolyDataReader()
     reader.SetFileName(filename)
     reader.Update()
+    
+    polyData = reader.GetOutput()
+    radiusArray = polyData.GetPointData().GetArray('Radius')
+    cell = polyData.GetCell(0)
+    cell_ids = cell.GetPointIds()
+    
+    sinewave = SineWave(pitch = 0, pitch_per_second = 50)
+    sinewave.play()
+    
+    for i in range(cell.GetNumberOfPoints()):
+      pt_id = cell_ids.GetId(i)
+      pt_r = radiusArray.GetValue(pt_id)
+      print(pt_r)
+      
+      frequency = (pt_r/8 * 48) - 12
+      sinewave.set_pitch(frequency)
+      time.sleep(0.01)
+    
+    
 
-    # Visualize
-    mapper = vtk.vtkPolyDataMapper()
-    mapper.SetInputConnection(reader.GetOutputPort())
-
-    actor = vtk.vtkActor()
-    actor.SetMapper(mapper)
-    actor.GetProperty().SetColor(colors.GetColor3d('NavajoWhite'))
-
-    renderer = vtk.vtkRenderer()
-    renderWindow = vtk.vtkRenderWindow()
-    renderWindow.AddRenderer(renderer)
-    renderWindowInteractor = vtk.vtkRenderWindowInteractor()
-    renderWindowInteractor.SetRenderWindow(renderWindow)
-
-    renderer.AddActor(actor)
-    renderer.SetBackground(colors.GetColor3d('DarkOliveGreen'))
-    renderer.GetActiveCamera().Pitch(90)
-    renderer.GetActiveCamera().SetViewUp(0, 0, 1)
-    renderer.ResetCamera()
-
-    renderWindow.SetSize(600, 600)
-    renderWindow.Render()
-    renderWindow.SetWindowName('ReadPolyData')
-    renderWindowInteractor.Start()
 
 
 if __name__ == '__main__':
