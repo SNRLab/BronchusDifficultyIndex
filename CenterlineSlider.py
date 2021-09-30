@@ -147,10 +147,6 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     if self.optionalModelNodeSelector.currentNode() is not None:
      self.optionalModelNodeSelector.setMRMLScene(slicer.mrmlScene)
 
-    global sinewave
-    sinewave = SineWave(pitch = 0, pitch_per_second = 50)
-    sinewave.play()
-
 
   def findClosestPointOnCenterline(self, point, centerlinePts):
     # given a point in [x, y, z] format and an array of all points on the centerline, return the pt on the centerline that is closest to that point
@@ -226,6 +222,10 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     self.frameSlider.value = closestPtID
     self.frameSlider.connect('valueChanged(double)', self.frameSliderValueChanged)
 
+    global sinewave
+    sinewave = SineWave(pitch = 0, pitch_per_second = 50)
+    sinewave.play()
+
 
   def getMaxAndMinMetrics(self, metricArray):
     maxMetric = np.max(metricArray)
@@ -244,7 +244,7 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
 
     newMetricVal = metricArray[numPtsOnCenterline-int(newValue)]
     print("newMetricVal: ", newMetricVal)
-    self.playSound(int(newMetricVal))
+    self.playSound(newMetricVal)
 
     pt = centerlinePts[int(newValue)]
     print("pt: ", pt)
