@@ -5,13 +5,12 @@ from slicer.ScriptedLoadableModule import *
 import logging
 import numpy as np
 import time
-#from pysinewave import SineWave
 
-try:
-  from pysinewave import SineWave
-except: 
-  slicer.util.pip_install('pysinewave')
-  from pysinewave import SineWave
+# try:
+#   from pysinewave import SineWave
+# except: 
+#   slicer.util.pip_install('pysinewave')
+#   from pysinewave import SineWave
 
 #global metricArray
 
@@ -132,6 +131,11 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     self.frameSlider.decimals = 0
     flythroughFormLayout.addRow("Frame:", self.frameSlider)
 
+    self.saveFiducialsOnPathCheckbox = qt.QCheckBox()
+    self.saveFiducialsOnPathCheckbox.toolTip = "Toggle whether to save the fiducials along the path for use in the endoscopy module (slower)."
+    flythroughFormLayout.addRow("Save fiducials for endoscopy : ", self.saveFiducialsOnPathCheckbox)
+
+
     # Play button
     self.playButton = qt.QPushButton("Play")
     self.playButton.toolTip = "Fly through path."
@@ -146,6 +150,22 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     self.seedFiducialsNodeSelector.setMRMLScene(slicer.mrmlScene)
     if self.optionalModelNodeSelector.currentNode() is not None:
      self.optionalModelNodeSelector.setMRMLScene(slicer.mrmlScene)
+
+    # Initialize the IGTLink components
+    self.openIGTNode = slicer.vtkMRMLIGTLConnectorNode()
+    slicer.mrmlScene.AddNode(self.openIGTNode)
+    self.openIGTNode.SetTypeServer(18944)
+    self.openIGTNode.Start()
+    print("openIGTNode: ", self.openIGTNode)
+    self.IGTActive = True
+
+    self.textNode = slicer.vtkMRMLTextNode()
+    self.textNode.SetEncoding(3)
+    slicer.mrmlScene.AddNode(self.textNode)
+
+    # Open the secondary Python script (which plays the audio outside of Slicer)
+    # exec(open("/home/rebeccalisk/Downloads/CenterlineSliderClient.py").read())
+
 
 
   def findClosestPointOnCenterline(self, point, centerlinePts):
@@ -202,7 +222,10 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     display.SetLineWidth(4)
     self.inputModelNodeSelector.currentNode().SetAndObserveDisplayNodeID( display.GetID() )
     display.SetActiveScalarName(activeScalarName)
-    display.SetAndObserveColorNodeID('vtkMRMLColorTableNodeFileHotToColdRainbow.txt')
+    if activeScalarName == 'Radius':
+      display.SetAndObserveColorNodeID('vtkMRMLColorTableNodeFileHotToColdRainbow.txt')
+    else:
+      display.SetAndObserveColorNodeID('vtkMRMLColorTableNodeFileColdToHotRainbow.txt')
     display.SetScalarVisibility(True)
 
     # If optional bronchus model was included as input, display the model at low opacity
@@ -212,6 +235,10 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
 
     global metricArray 
     metricArray = VN.vtk_to_numpy(vtkMetricArray)
+
+    if activeScalarName == 'Radius':
+      metricArray = np.array([(11-i) for i in metricArray])
+
     global maxMetric, minMetric
     (maxMetric, minMetric) = self.getMaxAndMinMetrics(metricArray)
     metricArray = np.interp(metricArray, (minMetric, maxMetric), (-12,12))
@@ -222,9 +249,8 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     self.frameSlider.value = closestPtID
     self.frameSlider.connect('valueChanged(double)', self.frameSliderValueChanged)
 
-    global sinewave
-    sinewave = SineWave(pitch = 0, pitch_per_second = 50)
-    sinewave.play()
+    # self.sinewave = SineWave(pitch = 0, pitch_per_second = 50)
+    # self.sinewave.play()
 
 
   def getMaxAndMinMetrics(self, metricArray):
@@ -233,10 +259,10 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     return (maxMetric, minMetric)
 
 
-  def playSound(self, metricVal):
-    # Play the note, where the pitch is the interpolated metric value
-    sinewave.set_pitch(metricVal)
-    print("note played: ", metricVal)
+  # def playSound(self, metricVal):
+  #   # Play the note, where the pitch is the interpolated metric value
+  #   self.sinewave.set_pitch(metricVal)
+  #   print("note played: ", metricVal)
 
 
   def frameSliderValueChanged(self, newValue):
@@ -244,22 +270,40 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
 
     newMetricVal = metricArray[numPtsOnCenterline-int(newValue)]
     print("newMetricVal: ", newMetricVal)
-    self.playSound(newMetricVal)
+    # self.playSound(newMetricVal)
+    self.sendTextNode(newMetricVal)
 
     pt = centerlinePts[int(newValue)]
     print("pt: ", pt)
     markupsNode = slicer.util.getNode(slicer.modules.markups.logic().GetActiveListID())
-    markupsNode.RemoveAllMarkups()
-    slicer.modules.markups.logic().AddFiducial(pt[0], pt[1], pt[2])
-
+    
+    if not self.saveFiducialsOnPathCheckbox.isChecked():
+      markupsNode.RemoveAllMarkups()
+      slicer.modules.markups.logic().AddFiducial(pt[0], pt[1], pt[2])
+    else:
+      num_markups = markupsNode.GetNumberOfMarkups() #new
+      print("num_markups: ", num_markups)
+      if not newValue%50 == 0:
+        markupsNode.RemoveMarkup(num_markups-1)
+      slicer.modules.markups.logic().AddFiducial(pt[0], pt[1], pt[2])
+      
 
   def onPlayButtonToggled(self, checked):
     if checked:
       self.timer.start()
       self.playButton.text = "Stop"
+
+      self.openIGTNode.RegisterOutgoingMRMLNode(self.textNode)
+      self.textNode.SetText("Play")
+      self.openIGTNode.PushNode(self.textNode)
+
     else:
       self.timer.stop()
       self.playButton.text = "Play"
+
+      self.openIGTNode.RegisterOutgoingMRMLNode(self.textNode)
+      self.textNode.SetText("Stop")
+      self.openIGTNode.PushNode(self.textNode)
 
 
   def flyToNext(self):
@@ -269,3 +313,12 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     else:
       self.timer.stop()
       self.playButton.text = "Play"
+
+
+  def sendTextNode(self, metricVal):
+    self.openIGTNode.RegisterOutgoingMRMLNode(self.textNode)
+    textOutput = str(metricVal)
+    self.textNode.SetText(textOutput)
+    self.openIGTNode.PushNode(self.textNode)
+    print("sending textNode")
+    print(self.textNode)
