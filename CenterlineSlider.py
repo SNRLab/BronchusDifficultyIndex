@@ -12,8 +12,6 @@ import time
 #   slicer.util.pip_install('pysinewave')
 #   from pysinewave import SineWave
 
-#global metricArray
-
 #
 # Centerline Audio Slider
 #
@@ -25,8 +23,8 @@ class CenterlineSlider(ScriptedLoadableModule):
 
   def __init__(self, parent):
     ScriptedLoadableModule.__init__(self, parent)
-    self.parent.title = "CenterlineSlider"
-    self.parent.categories = ["CenterlineSlider"]
+    self.parent.title = "Centerline Flythrough"
+    self.parent.categories = ["Centerline Modules"]
     self.parent.dependencies = []
     self.parent.contributors = ["Rebecca Lisk"]
     self.parent.helpText = """
@@ -55,7 +53,7 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     self.camera = None
     self.skip = 0
     self.timer = qt.QTimer()
-    self.timer.setInterval(40)
+    self.timer.setInterval(80)
     self.timer.connect('timeout()', self.flyToNext)
 
     self.endoscopyTimer = qt.QTimer()
@@ -65,6 +63,39 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
 
   def setup(self):
     ScriptedLoadableModuleWidget.setup(self)
+
+    # Server collapsible button
+    serverCollapsibleButton = ctk.ctkCollapsibleButton()
+    serverCollapsibleButton.text = "Start IGTLink Server"
+    self.layout.addWidget(serverCollapsibleButton)
+
+    # Layout within the path collapsible button
+    serverFormLayout = qt.QFormLayout(serverCollapsibleButton)
+
+    self.serverTextbox = qt.QLineEdit("18944")
+    self.serverTextbox.setReadOnly(False)
+    self.serverTextbox.setFixedWidth(75)
+    serverFormLayout.addRow("Server port:", self.serverTextbox)
+
+    # Script directory selector
+    self.scriptDirectory = ''
+    self.scriptDirectoryButton = qt.QPushButton('Select Directory')
+    self.scriptDirectoryButton.toolTip = "Click to select."
+    self.scriptDirectoryButton.connect("clicked()", self.onScriptDirectoryButtonClicked)
+    serverFormLayout.addRow("Client script directory:", self.scriptDirectoryButton)
+
+    # Connect to client button
+    self.connectToClientButton = qt.QPushButton("Connect to client")
+    self.connectToClientButton.toolTip = "Create the IGTLink server connection with shell."
+    self.connectToClientButton.enabled = True
+    serverFormLayout.addRow(self.connectToClientButton)
+    self.connectToClientButton.connect('clicked()', self.onConnectToClientButtonClicked)
+
+    self.disconnectFromSocketButton = qt.QPushButton("Disconnect from socket")
+    self.disconnectFromSocketButton.toolTip = "Disconnect from the socket when you finish using audio"
+    self.disconnectFromSocketButton.enabled = True
+    serverFormLayout.addRow(self.disconnectFromSocketButton)
+    self.disconnectFromSocketButton.connect('clicked()', self.onDisconnectFromSocketButtonClicked)
 
     # Path collapsible button
     pathCollapsibleButton = ctk.ctkCollapsibleButton()
@@ -104,7 +135,7 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     self.seedFiducialsNodeSelector = slicer.qSlicerSimpleMarkupsWidget()
     self.seedFiducialsNodeSelector.objectName = 'seedFiducialsNodeSelector'
     self.seedFiducialsNodeSelector.toolTip = "Select a fiducial to use as the origin of the Centerline."
-    self.seedFiducialsNodeSelector.setNodeBaseName("OriginSeed")
+    self.seedFiducialsNodeSelector.setNodeBaseName("Seed")
     self.seedFiducialsNodeSelector.defaultNodeColor = qt.QColor(0,255,0)
     self.seedFiducialsNodeSelector.tableWidget().hide()
     self.seedFiducialsNodeSelector.markupsSelectorComboBox().noneEnabled = False
@@ -163,7 +194,6 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     self.cameraNodeSelector.objectName = 'cameraNodeSelector'
     self.cameraNodeSelector.toolTip = "Select a camera that will fly along this path."
     self.cameraNodeSelector.nodeTypes = ['vtkMRMLCameraNode']
-    # self.cameraNodeSelector.enabled = True
     self.cameraNodeSelector.noneEnabled = False
     self.cameraNodeSelector.addEnabled = False
     self.cameraNodeSelector.removeEnabled = False
@@ -177,9 +207,6 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     self.inputFiducialsNodeSelector.nodeTypes = ['vtkMRMLMarkupsFiducialNode', 'vtkMRMLMarkupsCurveNode',
       'vtkMRMLAnnotationHierarchyNode', 'vtkMRMLFiducialListNode']
     self.inputFiducialsNodeSelector.enabled = True
-    # self.inputFiducialsNodeSelector.noneEnabled = False
-    # self.inputFiducialsNodeSelector.addEnabled = False
-    # self.inputFiducialsNodeSelector.removeEnabled = False
     endoscopyPathFormLayout.addRow("Input Fiducials:", self.inputFiducialsNodeSelector)
 
     # Output path node selector
@@ -188,10 +215,6 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     self.outputPathNodeSelector.toolTip = "Select a fiducial list to define control points for the path."
     self.outputPathNodeSelector.nodeTypes = ['vtkMRMLModelNode']
     self.outputPathNodeSelector.enabled = True
-    # self.outputPathNodeSelector.noneEnabled = False
-    # self.outputPathNodeSelector.addEnabled = True
-    # self.outputPathNodeSelector.removeEnabled = True
-    # self.outputPathNodeSelector.renameEnabled = True
     endoscopyPathFormLayout.addRow("Output Path:", self.outputPathNodeSelector)
 
     # CreateEndoscopyPath button
@@ -229,7 +252,7 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     self.frameDelaySlider.connect('valueChanged(double)', self.frameDelaySliderValueChanged)
     self.frameDelaySlider.decimals = 0
     self.frameDelaySlider.minimum = 5
-    self.frameDelaySlider.maximum = 100
+    self.frameDelaySlider.maximum = 1000
     self.frameDelaySlider.suffix = " ms"
     self.frameDelaySlider.value = 100
     endoscopyFlythroughFormLayout.addRow("Frame delay:", self.frameDelaySlider)
@@ -265,21 +288,61 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     if self.optionalModelNodeSelector.currentNode() is not None:
      self.optionalModelNodeSelector.setMRMLScene(slicer.mrmlScene)
 
-    # Initialize the IGTLink components
-    self.openIGTNode = slicer.vtkMRMLIGTLConnectorNode()
-    slicer.mrmlScene.AddNode(self.openIGTNode)
-    self.openIGTNode.SetTypeServer(18950)
-    self.openIGTNode.Start()
-    print("openIGTNode: ", self.openIGTNode)
-    self.IGTActive = True
+    # # Initialize the IGTLink components
+    # self.openIGTNode = slicer.vtkMRMLIGTLConnectorNode()
+    # slicer.mrmlScene.AddNode(self.openIGTNode)
+    # self.openIGTNode.SetTypeServer(18950)
+    # self.openIGTNode.Start()
+    # print("openIGTNode: ", self.openIGTNode)
+    # self.IGTActive = True
 
     self.textNode = slicer.vtkMRMLTextNode()
     self.textNode.SetEncoding(3)
     slicer.mrmlScene.AddNode(self.textNode)
 
-    # Open the secondary Python script (which plays the audio outside of Slicer)
-    # exec(open("/home/rebeccalisk/Downloads/CenterlineSliderClient.py").read())
 
+  def onScriptDirectoryButtonClicked(self):
+    fileDialog = qt.QFileDialog()
+    self.scriptDirectory = fileDialog.getExistingDirectory( None, 'Client script directory: ', self.scriptDirectory ) 
+
+  def onDisconnectFromSocketButtonClicked(self):
+    self.openIGTNode.Stop()
+
+  def onConnectToClientButtonClicked(self):
+    portNumber = self.serverTextbox.text
+    print("portNumber: ", portNumber)
+
+    # # Initialize the IGTLink Slicer-side server components
+    # self.openIGTNode = slicer.vtkMRMLIGTLConnectorNode()
+    # slicer.mrmlScene.AddNode(self.openIGTNode)
+    # self.openIGTNode.SetTypeServer(int(portNumber))
+    # self.openIGTNode.Start()
+    # print("openIGTNode: ", self.openIGTNode)
+    # self.IGTActive = True
+
+    if not self.scriptDirectory == '':
+      # Run the centerlineSliderClient.py script in shell rather than manually
+      import subprocess
+      import platform
+      plt = platform.system()
+      
+      if plt == "Windows":
+        bat_command_to_execute = self.scriptDirectory + '/RunCenterlineClient.bat'
+        python_command_to_execute = self.scriptDirectory + '/CenterlineSliderClient.py'
+        subprocess.Popen([bat_command_to_execute, portNumber, python_command_to_execute], creationflags=subprocess.CREATE_NEW_CONSOLE, env=slicer.util.startupEnvironment())
+      
+      else: # Linux or Mac
+        bat_command_to_execute = self.scriptDirectory + '/RunCenterlineClient.sh'
+        python_command_to_execute = self.scriptDirectory + '/CenterlineSliderClient.py'
+        subprocess.Popen(args=['%s %s %s' % (bat_command_to_execute, portNumber, python_command_to_execute)], env=slicer.util.startupEnvironment(), shell=True)
+
+    # Initialize the IGTLink Slicer-side server components
+    self.openIGTNode = slicer.vtkMRMLIGTLConnectorNode()
+    slicer.mrmlScene.AddNode(self.openIGTNode)
+    self.openIGTNode.SetTypeServer(int(portNumber))
+    self.openIGTNode.Start()
+    print("openIGTNode: ", self.openIGTNode)
+    self.IGTActive = True
 
 
   def findClosestPointOnCenterline(self, point):
@@ -320,8 +383,8 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     # Find point on centerline closest to the seed point
     closestPt = self.findClosestPointOnCenterline(seedCoordinates)
     closestPtID = self.centerlinePts.index(closestPt)
-    print("closestPt", closestPt)
-    print("closestPtID", closestPtID)
+    # print("closestPt", closestPt)
+    # print("closestPtID", closestPtID)
 
     # Determine the scalar array to display and play audio from
     vtkMetricArray = centerline.GetPolyData().GetPointData().GetArray(3)
@@ -336,7 +399,7 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     display.SetLineWidth(4)
     self.inputModelNodeSelector.currentNode().SetAndObserveDisplayNodeID( display.GetID() )
     display.SetActiveScalarName(activeScalarName)
-    if activeScalarName == 'Radius':
+    if activeScalarName == 'Radius' or activeScalarName == 'GlobalRelativeAngle':
       display.SetAndObserveColorNodeID('vtkMRMLColorTableNodeFileHotToColdRainbow.txt')
     else:
       display.SetAndObserveColorNodeID('vtkMRMLColorTableNodeFileColdToHotRainbow.txt')
@@ -356,6 +419,7 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     global maxMetric, minMetric
     #(maxMetric, minMetric) = self.getMaxAndMinMetrics(self.metricArray)
     (maxMetric, minMetric) = self.getMaxAndMinMetrics()
+    self.originalMetricArray = self.metricArray
     self.metricArray = np.interp(self.metricArray, (minMetric, maxMetric), (-12,12))
 
     # Update frame slider range
@@ -382,15 +446,15 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
 
 
   def frameSliderValueChanged(self, newValue):
-    print ("frameSliderValueChanged:", newValue)
+    # print ("frameSliderValueChanged:", newValue)
 
     newMetricVal = self.metricArray[self.numPtsOnCenterline-int(newValue)]
-    print("newMetricVal: ", newMetricVal)
+    # print("newMetricVal: ", newMetricVal)
     # self.playSound(newMetricVal)
     self.sendTextNode(newMetricVal)
 
     pt = self.centerlinePts[int(newValue)]
-    print("pt: ", pt)
+    # print("pt: ", pt)
     markupsNode = slicer.util.getNode(slicer.modules.markups.logic().GetActiveListID())
     
     if not self.saveFiducialsOnPathCheckbox.isChecked():
@@ -398,8 +462,8 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
       slicer.modules.markups.logic().AddFiducial(pt[0], pt[1], pt[2])
     else:
       num_markups = markupsNode.GetNumberOfMarkups() #new
-      print("num_markups: ", num_markups)
-      if not newValue%50 == 0:
+      # print("num_markups: ", num_markups)
+      if not newValue%100 == 0:
         markupsNode.RemoveMarkup(num_markups-1)
       slicer.modules.markups.logic().AddFiducial(pt[0], pt[1], pt[2])
       
@@ -440,8 +504,8 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     textOutput = str(metricVal)
     self.textNode.SetText(textOutput)
     self.openIGTNode.PushNode(self.textNode)
-    print("sending textNode")
-    print(self.textNode)
+    # print("sending textNode")
+    # print(self.textNode)
 
   # ---------- Endoscopy integration --------- #
   def setCameraNode(self, newCameraNode):
@@ -496,7 +560,6 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     print("-> Model created")
 
     # Make output model visible and increase line thickness
-    # TODO
     slicer.modules.models.logic().SetAllModelsVisibility(1)
 
     # Update frame slider range
@@ -510,6 +573,10 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
 
     # Enable / Disable flythrough button
     self.endoscopyFlythroughCollapsibleButton.enabled = len(result.path) > 0
+
+    # Remove green seed fiducials from 3D view
+    fiducialsNode.RemoveAllMarkups()
+
 
   def endoscopyFrameSliderValueChanged(self, newValue):
     #print "frameSliderValueChanged:", newValue
@@ -539,15 +606,19 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     print("Closest pt index: ", closestPtID)
     newMetricVal = self.metricArray[self.numPtsOnCenterline-int(closestPtID)]
     print("newMetricVal: ", newMetricVal)
+    # originalMetricVal is the non-interpolated metric to display on the screen
+    originalMetricVal = round(self.originalMetricArray[self.numPtsOnCenterline-int(closestPtID)], 2)
+    print("originalMetricVal: ", originalMetricVal)
     # self.playSound(newMetricVal)
     self.sendTextNode(newMetricVal)
 
-    # Add a fiducial at the current camera position point
-    # markupsNode = slicer.util.getNode(slicer.modules.markups.logic().GetActiveListID())
-    # markupsNode.RemoveAllMarkups()
-    # print(markupsNode)
-    # slicer.modules.markups.logic().AddFiducial(cameraPosition[0], cameraPosition[1], cameraPosition[2])
-
+    # Print the pt index and metric value in a vtkCornerAnnotation
+    view = slicer.app.layoutManager().threeDWidget(0).threeDView()
+    view.cornerAnnotation().SetText(vtk.vtkCornerAnnotation.UpperRight, "Point ID: " + str(closestPtID) + "\nMetric Value: " + str(originalMetricVal))
+    view.cornerAnnotation().GetTextProperty().SetColor(0,0,0)
+    view.cornerAnnotation().SetMaximumFontSize(15)
+    view.cornerAnnotation().SetMinimumFontSize(15)
+    view.forceRender()
 
     wasModified = self.cameraNode.StartModify()
 
@@ -845,6 +916,7 @@ class EndoscopyPathModel:
         cursor.CreateDefaultDisplayNodes()
         cursor.GetDisplayNode().SetSelectedColor(1,0,0)  # red
         cursor.GetDisplayNode().SetSliceProjection(True)
+        cursor.GetDisplayNode().SetGlyphScale(2.2)
         cursor.AddControlPoint(vtk.vtkVector3d(0,0,0)," ")  # do not show any visible label
         cursor.SetNthControlPointLocked(0, True)
       else:
