@@ -21,7 +21,7 @@ class ModifiedCenterlineComputation(ScriptedLoadableModule):
   def __init__(self, parent):
     ScriptedLoadableModule.__init__(self, parent)
     self.parent.title = "Modified Centerline Computation"
-    self.parent.categories = ["Vascular Modeling Toolkit"]
+    self.parent.categories = ["Centerline Modules"]
     self.parent.dependencies = []
     self.parent.contributors = ["Daniel Haehn (Boston Children's Hospital)", "Luca Antiga (Orobix)", "Steve Pieper (Isomics)", "Andras Lasso (PerkLab)"]
     self.parent.helpText = """
@@ -335,9 +335,6 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
 
   def findClosestPointOnCenterline(self, point, allPts):
     # given a point in [x, y, z] format and a numpy array of all points on the centerline, return the pt on the centerline that is closest to that point
-    
-    print("we in it")
-
     min_dist = float("inf")
     current_point = allPts[0]
     # current_point = np.array([float(s) for s in (str( allPts[0] ).replace(' ','')[1:-1]).split(',')])
@@ -681,7 +678,7 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
       print("reference vector: ", reference_vector)
       # before: 600-800
 
-      newPlane = True
+      newPlane = False
 
       # Track min and max values of each metric
       min_radius = float("inf")
@@ -709,10 +706,13 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
 
       # For plane rotation calculations
       threshold_pass_count = 0
+      firstPlane = True
 
       # To remove points with radius smaller than the bronchscope radius
       # bronchoscope_radius = 0.3
       bronchoscope_radius = 0.0
+      setRadiusLimitFiducial = True
+      scene = slicer.mrmlScene
 
       pointIds = vtk.vtkIdList()
       network.GetLines().GetCell(0, pointIds)
@@ -730,13 +730,25 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
             pt_r = radius_array.GetValue( pt_id )
             pt_coordinates = network.GetPoint( pt_id )
 
+            # Insert fiducial point where radius first equals the radius of the bronchoscope to indicate the limit of the bronchoscope's path
+            if pt_r < 4.0 and setRadiusLimitFiducial and pt_id > 100:
+              radiusFiducial = scene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", scene.GenerateUniqueName("Bronchoscope Limit"))
+              radiusFiducial.CreateDefaultDisplayNodes()
+              radiusFiducial.GetDisplayNode().SetSelectedColor(1,0,0)  # red
+              radiusFiducial.GetDisplayNode().SetSliceProjection(True)
+              radiusFiducial.GetDisplayNode().SetGlyphScale(1.2)
+              # radiusFiducial.AddControlPoint(vtk.vtkVector3d(0,0,0)," ")  # do not show any visible label
+              radiusFiducial.AddControlPoint(vtk.vtkVector3d(pt_coordinates),"Bronchoscope exceeds bronchus radius")  # do not show any visible label
+              radiusFiducial.SetNthControlPointLocked(0, True)
+              setRadiusLimitFiducial = False
+
             if self.colorByLocalCurvatureCheckbox.isChecked() or self.colorByTotalIndexCheckbox.isChecked() or self.colorByCumulativeIndexCheckbox.isChecked():
               # Calculate curvature here
               # if j >= 50 and j < (cell.GetNumberOfPoints() - 50):
-              if pt_id >= 50 and pt_id < (localcurvature_array.GetMaxId()-50):
+              if pt_id >= 30 and pt_id < (localcurvature_array.GetMaxId()-30):
                 curr_pt = np.array([float(s) for s in (str( cell_points.GetPoint(j) ).replace(' ','')[1:-1]).split(',')])
-                prev_pt = np.array([float(s) for s in (str( cell_points.GetPoint(j-50) ).replace(' ','')[1:-1]).split(',')])
-                next_pt = np.array([float(s) for s in (str( cell_points.GetPoint(j+50) ).replace(' ','')[1:-1]).split(',')])
+                prev_pt = np.array([float(s) for s in (str( cell_points.GetPoint(j-30) ).replace(' ','')[1:-1]).split(',')])
+                next_pt = np.array([float(s) for s in (str( cell_points.GetPoint(j+30) ).replace(' ','')[1:-1]).split(',')])
 
                 # Triangle Lengths
                 a = np.linalg.norm(next_pt - prev_pt) #a = c-b
@@ -755,7 +767,7 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
                 if pt_id <= localcurvature_array.GetMaxId() and not np.isnan(local_curvature):
                   localcurvature_array.SetValue(pt_id, local_curvature)
 
-              if 0 <= pt_id <= 51 or (localcurvature_array.GetMaxId()-50) <= pt_id <= localcurvature_array.GetMaxId():
+              if 0 <= pt_id <= 31 or (localcurvature_array.GetMaxId()-30) <= pt_id <= localcurvature_array.GetMaxId():
                 localcurvature_array.SetValue(pt_id, 0.0)
 
                 #else:
@@ -794,44 +806,88 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
 
 
             if self.colorByPlaneRotationCheckbox.isChecked() or self.colorByTotalIndexCheckbox.isChecked() or self.colorByCumulativeIndexCheckbox.isChecked():
-              
-              # new new new
-              # TODO
 
-              # Solve for the current vector (10 points ahead of the current point)
-              if j > 0 and j < (cell.GetNumberOfPoints() - 10):
+              # Solve for the current vector (15 points ahead of the current point)
+              if j >= 15 and j < (cell.GetNumberOfPoints() - 15):
                 # Find the vector of that point to the 10th point ahead of it
+                prev_pt = np.array([float(s) for s in (str( cell_points.GetPoint(j-15) ).replace(' ','')[1:-1]).split(',')])
                 curr_pt = np.array([float(s) for s in (str( cell_points.GetPoint(j) ).replace(' ','')[1:-1]).split(',')])
-                next_pt = np.array([float(s) for s in (str( cell_points.GetPoint(j+10) ).replace(' ','')[1:-1]).split(',')])
-                current_vector = (next_pt - curr_pt)/np.linalg.norm(next_pt - curr_pt)
+                next_pt = np.array([float(s) for s in (str( cell_points.GetPoint(j+15) ).replace(' ','')[1:-1]).split(',')])
+                current_vector = (next_pt - prev_pt)/np.linalg.norm(next_pt - prev_pt)
 
                 # Take the cross product of the two reference vectors (trachea vector & current vector) to identify the vector that is normal to the plane defined by the reference vectors
                 # The cross product of a and b is a vector perpendicular to both a and b. 
-                normal_vector = np.cross(trachea_vector, reference_vector)
+                if firstPlane:
+                  normal_vector = 100*np.cross(trachea_vector, reference_vector)
+                  firstPlane = False
+                  print("normal_vector (1): ", normal_vector)
+              
+                elif newPlane: # Not first plane -- recalculate the normal vector
+                  normal_vector = 100*np.cross(current_vector, reference_vector)
+                  print("normal_vector (1): ", normal_vector)
 
                 # Solve for the angle between the plane and the current vector
                 planerotation_angle = np.arcsin((np.dot(normal_vector, current_vector))/(np.linalg.norm(normal_vector)*np.linalg.norm(current_vector)))
-                print("Plane rotation angle: ", planerotation_angle)
 
                 # Add the plane to the scene as a model if the plane changes
-                # if newPlane:
-                #   planeSource = vtk.vtkPlaneSource()
-                #   planeSource.SetOrigin()
-                #   planeSource.SetPoint1()
-                #   planeSource.SetPoint2()
-                #   planeModel = slicer.modules.models.logic().AddModel(planeSource.getOutputPort)
-                #   modelDisplay = planeModel.GetDisplayNode()
-                #   modelDisplay.SetColor(1,1,0)
-                #   modelDisplay.SetBackfaceCulling(0)
+                #if newPlane or firstPlane:
+                if newPlane or firstPlane:
+                  if self.colorByPlaneRotationCheckbox.isChecked():
 
-                # If the angle between the plane and the current vector reaches a threshold (+/- 0.25?), increment the threshold counter
-                if planerotation_angle >= 0.25 or planerotation_angle <= -0.25:
+                    print("NEW PLANE!!")
+
+                    d = -np.dot(curr_pt, normal_vector)
+
+                    # Create 2 new points on the plane based on the coordinates of the original point
+                    plane_pt_1z = (-normal_vector[0]*(curr_pt[0] + 50) - normal_vector[1]*curr_pt[1])*1./normal_vector[2]
+                    plane_pt1 = np.array([curr_pt[0]+50, curr_pt[1], plane_pt_1z])
+
+                    plane_pt_2z = (-normal_vector[0]*(curr_pt[0] - 50) - normal_vector[1]*curr_pt[1])*1./normal_vector[2]
+                    plane_pt2 = np.array([curr_pt[0]-50, curr_pt[1], plane_pt_2z])
+
+                    planeModelNode = slicer.mrmlScene.CreateNodeByClass("vtkMRMLMarkupsPlaneNode")
+                    planeModelNode.UnRegister(None)
+                    planeModelNode.SetOrigin(curr_pt)
+
+                    plane_pt1_vtk = vtk.vtkVector3d()
+                    plane_pt1_vtk.SetX(plane_pt1[0])
+                    plane_pt1_vtk.SetY(plane_pt1[1])
+                    plane_pt1_vtk.SetZ(plane_pt1[2])
+
+                    plane_pt2_vtk = vtk.vtkVector3d()
+                    plane_pt2_vtk.SetX(plane_pt2[0])
+                    plane_pt2_vtk.SetY(plane_pt2[1])
+                    plane_pt2_vtk.SetZ(plane_pt2[2])
+
+                    print("plane pt 1 vtk: ", plane_pt1_vtk)
+                    print("plane pt 2 vtk: ", plane_pt2_vtk)
+                    
+                    ctrlpt_1 = planeModelNode.AddControlPoint(plane_pt1_vtk)
+                    ctrlpt_2 = planeModelNode.AddControlPoint(plane_pt2_vtk)
+
+                    #planeModelNode.SetHideFromEditors(False)
+                    #slicer.mrmlScene.AddNode(planeModelNode)
+
+                    print("planeModel: ", planeModelNode)
+                    print("curr_pt: ", curr_pt)
+                    print("normal vector: ", normal_vector)
+                    print("plane_pt1: ", plane_pt1)
+                    print("plane_pt2: ", plane_pt2)
+
+                    newPlane = False
+
+                    firstPlane = False
+
+                # If the angle between the plane and the current vector reaches a threshold (+/- 0.5?), increment the threshold counter
+                if planerotation_angle >= 0.75 or planerotation_angle <= -0.75:
                   threshold_pass_count += 1
                   newPlane = False
                   # Once the threshold has been passed 100 times in a row, update reference vector
-                  if threshold_pass_count >= 150:
+                  if threshold_pass_count >= 100:
                     reference_vector = current_vector
-                    newPlane = True
+                    threshold_pass_count = 0
+                    #newPlane = True
+                    print("PASSED THE THRESHOLD")
                 else:
                   threshold_pass_count = 0
                   newPlane = False
@@ -898,14 +954,16 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
         localcurvature_array = vtk_to_numpy(localcurvature_array)
         globalrelativeangle_array = vtk_to_numpy(globalrelativeangle_array)
         curvaturerate_array = vtk_to_numpy(curvaturerate_array)
+        planerotation_array = vtk_to_numpy(planerotation_array)
 
         # Remove excess points from the arrays that would prevent broadcasting them together
-        minLength = np.min([len(radius_array), len(localcurvature_array), len(globalrelativeangle_array), len(curvaturerate_array)])
+        minLength = np.min([len(radius_array), len(localcurvature_array), len(globalrelativeangle_array), len(curvaturerate_array), len(planerotation_array)])
         print(minLength)
         radius_array = radius_array[:minLength]
         localcurvature_array = localcurvature_array[:minLength]
         globalrelativeangle_array = globalrelativeangle_array[:minLength]
         curvaturerate_array = curvaturerate_array[:minLength]
+        planerotation_array = planerotation_array[:minLength]
 
         totalindex_array = []
         for i in range(minLength):
@@ -913,7 +971,7 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
           # totalindex_array.append(1.0*(100-radius_array[i]) + 1.0*localcurvature_array[i] + 1.0*(100-globalrelativeangle_array[i]) + 1.0*curvaturerate_array[i])
           # totalindex_array.append(radiusScalar*(1-radius_array[i]) + localCurvatureScalar*localcurvature_array[i] + globalAngleScalar*(1-globalrelativeangle_array[i]) + curvatureRateScalar*curvaturerate_array[i])
           # totalindex_array.append(0.5*radiusScalar*(10-radius_array[i]) + 0.02*localCurvatureScalar*localcurvature_array[i] + 2.5*globalAngleScalar*(1-globalrelativeangle_array[i]) + 0.04*curvatureRateScalar*curvaturerate_array[i])
-          totalindex_array.append(0.25*(11-radius_array[i]) + 0.06*(11-radius_array[i])*localcurvature_array[i] + 2.5*(1-globalrelativeangle_array[i]) + 0.04*curvaturerate_array[i])
+          totalindex_array.append(0.01*i + 0.25*(11-radius_array[i]) + 0.04*(11-radius_array[i])*localcurvature_array[i] + 2.5*(1-globalrelativeangle_array[i]) + 0.04*curvaturerate_array[i] + 10*np.abs(planerotation_array[i]))
 
 
         # Convert all numpy arrays back to vtkdoublearrays
@@ -1148,14 +1206,14 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
     if self.colorByRadiusCheckbox.isChecked():
       # https://gist.github.com/ungi/c1c448fa51cc458d3da75f5e5c73c74c
       slicer.mrmlScene.AddNode(currentOutputModelNode)
-      currentOutputModelNode.SetName('OuputModelNode')
+      currentOutputModelNode.SetName('OutputModelNode')
       currentOutputModelNode.SetAndObservePolyData(network)
       display = slicer.vtkMRMLModelDisplayNode()
       slicer.mrmlScene.AddNode( display )
       display.SetLineWidth(6)
       currentOutputModelNode.SetAndObserveDisplayNodeID( display.GetID() )
       display.SetActiveScalarName('Radius')
-      display.SetAndObserveColorNodeID('vtkMRMLColorTableNodeFileColdToHotRainbow.txt')
+      display.SetAndObserveColorNodeID('vtkMRMLColorTableNodeFileHotToColdRainbow.txt')
       display.SetScalarVisibility(True)
 
       # if not preview: 
@@ -1180,7 +1238,7 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
     elif self.colorByLocalCurvatureCheckbox.isChecked():
       # https://gist.github.com/ungi/c1c448fa51cc458d3da75f5e5c73c74c
       slicer.mrmlScene.AddNode(currentOutputModelNode)
-      currentOutputModelNode.SetName('OuputModelNode')
+      currentOutputModelNode.SetName('OutputModelNode')
       currentOutputModelNode.SetAndObservePolyData(network)
       display = slicer.vtkMRMLModelDisplayNode()
       slicer.mrmlScene.AddNode( display )
@@ -1193,7 +1251,7 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
     elif self.colorByGlobalRelativeAngleCheckbox.isChecked():
       # https://gist.github.com/ungi/c1c448fa51cc458d3da75f5e5c73c74c
       slicer.mrmlScene.AddNode(currentOutputModelNode)
-      currentOutputModelNode.SetName('OuputModelNode')
+      currentOutputModelNode.SetName('OutputModelNode')
       currentOutputModelNode.SetAndObservePolyData(network)
       display = slicer.vtkMRMLModelDisplayNode()
       slicer.mrmlScene.AddNode( display )
@@ -1206,7 +1264,7 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
     elif self.colorByPlaneRotationCheckbox.isChecked():
       # https://gist.github.com/ungi/c1c448fa51cc458d3da75f5e5c73c74c
       slicer.mrmlScene.AddNode(currentOutputModelNode)
-      currentOutputModelNode.SetName('OuputModelNode')
+      currentOutputModelNode.SetName('OutputModelNode')
       currentOutputModelNode.SetAndObservePolyData(network)
       display = slicer.vtkMRMLModelDisplayNode()
       slicer.mrmlScene.AddNode( display )
@@ -1219,7 +1277,7 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
     elif self.colorByCurvatureRateCheckbox.isChecked():
       # https://gist.github.com/ungi/c1c448fa51cc458d3da75f5e5c73c74c
       slicer.mrmlScene.AddNode(currentOutputModelNode)
-      currentOutputModelNode.SetName('OuputModelNode')
+      currentOutputModelNode.SetName('OutputModelNode')
       currentOutputModelNode.SetAndObservePolyData(network)
       display = slicer.vtkMRMLModelDisplayNode()
       slicer.mrmlScene.AddNode( display )
@@ -1232,7 +1290,7 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
     elif self.colorByTotalIndexCheckbox.isChecked():
       # https://gist.github.com/ungi/c1c448fa51cc458d3da75f5e5c73c74c
       slicer.mrmlScene.AddNode(currentOutputModelNode)
-      currentOutputModelNode.SetName('OuputModelNode')
+      currentOutputModelNode.SetName('OutputModelNode')
       currentOutputModelNode.SetAndObservePolyData(network)
       display = slicer.vtkMRMLModelDisplayNode()
       slicer.mrmlScene.AddNode( display )
@@ -1245,7 +1303,7 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
     elif self.colorByCumulativeIndexCheckbox.isChecked():
       # https://gist.github.com/ungi/c1c448fa51cc458d3da75f5e5c73c74c
       slicer.mrmlScene.AddNode(currentOutputModelNode)
-      currentOutputModelNode.SetName('OuputModelNode')
+      currentOutputModelNode.SetName('OutputModelNode')
       currentOutputModelNode.SetAndObservePolyData(network)
       display = slicer.vtkMRMLModelDisplayNode()
       slicer.mrmlScene.AddNode( display )
