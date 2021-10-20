@@ -804,6 +804,9 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
                         globalrelativeangle_array.SetValue(pt_id, 0.0)
                   #print (globalrelativeangle_similiarity)
 
+              if 0 <= pt_id <= 11 or (globalrelativeangle_array.GetMaxId()-10) <= pt_id <= globalrelativeangle_array.GetMaxId():
+                globalrelativeangle_array.SetValue(pt_id, 0.0)
+
 
             if self.colorByPlaneRotationCheckbox.isChecked() or self.colorByTotalIndexCheckbox.isChecked() or self.colorByCumulativeIndexCheckbox.isChecked():
 
@@ -898,10 +901,13 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
 
                 # Add plane rotation value to the array
                 if pt_id <= planerotation_array.GetMaxId():
-                  if not np.isnan(planerotation_angle):
+                  if not np.isnan(planerotation_angle) and not planerotation_angle > 1.58 and not planerotation_angle < -1.58:
                     planerotation_array.SetValue(pt_id, np.abs(planerotation_angle))
                   else:
-                    planerotation_array.SetValue(pt_id, 0.0)           
+                    planerotation_array.SetValue(pt_id, 0.0)
+
+              if 0 <= pt_id <= 15 or (planerotation_array.GetMaxId()-15) <= pt_id <= planerotation_array.GetMaxId():
+                planerotationangle_array.SetValue(pt_id, 0.0)
 
 
             if self.colorByCurvatureRateCheckbox.isChecked() or self.colorByTotalIndexCheckbox.isChecked() or self.colorByCumulativeIndexCheckbox.isChecked():
@@ -939,6 +945,9 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
               #elif (curvaturerate_array.GetMaxId()-200)<pt_id<curvaturerate_array.GetMaxId():
               elif pt_id < curvaturerate_array.GetMaxId():
                 curvaturerate_array.SetValue(pt_id, saved_curvature_rate)
+
+              if 0 <= pt_id <= 200:
+                curvaturerate_array.SetValue(pt_id, 0.0)
 
       if self.colorByTotalIndexCheckbox.isChecked() or self.colorByCumulativeIndexCheckbox.isChecked():
 
