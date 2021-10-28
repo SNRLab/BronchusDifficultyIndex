@@ -53,7 +53,7 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     self.camera = None
     self.skip = 0
     self.timer = qt.QTimer()
-    self.timer.setInterval(80)
+    self.timer.setInterval(5)
     self.timer.connect('timeout()', self.flyToNext)
 
     self.endoscopyTimer = qt.QTimer()
@@ -80,6 +80,7 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     # Script directory selector
     self.scriptDirectory = ''
     self.scriptDirectoryButton = qt.QPushButton('Select Directory')
+    self.scriptDirectoryButton.setFixedWidth(150)
     self.scriptDirectoryButton.toolTip = "Click to select."
     self.scriptDirectoryButton.connect("clicked()", self.onScriptDirectoryButtonClicked)
     serverFormLayout.addRow("Client script directory:", self.scriptDirectoryButton)
@@ -279,6 +280,100 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
 
     # ---------- End Endoscopy integration ---------- #
 
+    #
+    # Distance selector tool
+    #
+
+    distanceCollapsibleButton = ctk.ctkCollapsibleButton()
+    distanceCollapsibleButton.text = "Distance between 2 points along the curve"
+    self.layout.addWidget(distanceCollapsibleButton)
+    distanceFormLayout = qt.QFormLayout(distanceCollapsibleButton)
+
+    # vtkpolydata centerline selector
+    self.centerlineNodeSelector = slicer.qMRMLNodeComboBox()
+    self.centerlineNodeSelector.objectName = 'centerlineNodeSelector'
+    self.centerlineNodeSelector.toolTip = "Select the centerline input polydata."
+    self.centerlineNodeSelector.nodeTypes = ['vtkMRMLModelNode']
+    self.centerlineNodeSelector.hideChildNodeTypes = ['vtkMRMLAnnotationNode']  # hide all annotation nodes
+    self.centerlineNodeSelector.noneEnabled = False
+    self.centerlineNodeSelector.addEnabled = False
+    self.centerlineNodeSelector.removeEnabled = False
+    distanceFormLayout.addRow("Centerline polydata:", self.centerlineNodeSelector)
+    self.parent.connect('mrmlSceneChanged(vtkMRMLScene*)',
+                        self.centerlineNodeSelector, 'setMRMLScene(vtkMRMLScene*)')
+
+    # (Optional) vtk model selector
+    self.optionalDistanceModelNodeSelector = slicer.qMRMLNodeComboBox()
+    self.optionalDistanceModelNodeSelector.objectName = 'optionalDistanceModelNodeSelector'
+    self.optionalDistanceModelNodeSelector.toolTip = "Select the input bronchus model."
+    self.optionalDistanceModelNodeSelector.nodeTypes = ['vtkMRMLModelNode']
+    self.optionalDistanceModelNodeSelector.hideChildNodeTypes = ['vtkMRMLAnnotationNode']  # hide all annotation nodes
+    self.optionalDistanceModelNodeSelector.noneEnabled = False
+    self.optionalDistanceModelNodeSelector.addEnabled = False
+    self.optionalDistanceModelNodeSelector.removeEnabled = False
+    distanceFormLayout.addRow("Bronchus model (optional):", self.optionalDistanceModelNodeSelector)
+    self.parent.connect('mrmlSceneChanged(vtkMRMLScene*)',
+                        self.optionalDistanceModelNodeSelector, 'setMRMLScene(vtkMRMLScene*)')
+
+    # start seed selector
+    self.startFiducialsNodeSelector = slicer.qSlicerSimpleMarkupsWidget()
+    self.startFiducialsNodeSelector.objectName = 'startFiducialsNodeSelector'
+    self.startFiducialsNodeSelector.toolTip = "Select a start point for the distance measurement."
+    self.startFiducialsNodeSelector.setNodeBaseName("Start")
+    self.startFiducialsNodeSelector.defaultNodeColor = qt.QColor(255,85,0)
+    self.startFiducialsNodeSelector.tableWidget().hide()
+    self.startFiducialsNodeSelector.markupsSelectorComboBox().noneEnabled = False
+    self.startFiducialsNodeSelector.markupsPlaceWidget().placeMultipleMarkups = slicer.qSlicerMarkupsPlaceWidget.ForcePlaceSingleMarkup
+    distanceFormLayout.addRow("Start point:", self.startFiducialsNodeSelector)
+    self.parent.connect('mrmlSceneChanged(vtkMRMLScene*)',
+                        self.startFiducialsNodeSelector, 'setMRMLScene(vtkMRMLScene*)')
+
+    # end seed selector
+    self.endFiducialsNodeSelector = slicer.qSlicerSimpleMarkupsWidget()
+    self.endFiducialsNodeSelector.objectName = 'endFiducialsNodeSelector'
+    self.endFiducialsNodeSelector.toolTip = "Select a end point for the distance measurement."
+    self.endFiducialsNodeSelector.setNodeBaseName("End")
+    self.endFiducialsNodeSelector.defaultNodeColor = qt.QColor(255,85,0)
+    self.endFiducialsNodeSelector.tableWidget().hide()
+    self.endFiducialsNodeSelector.markupsSelectorComboBox().noneEnabled = False
+    self.endFiducialsNodeSelector.markupsPlaceWidget().placeMultipleMarkups = slicer.qSlicerMarkupsPlaceWidget.ForcePlaceSingleMarkup
+    distanceFormLayout.addRow("End point:", self.endFiducialsNodeSelector)
+    self.parent.connect('mrmlSceneChanged(vtkMRMLScene*)',
+                        self.endFiducialsNodeSelector, 'setMRMLScene(vtkMRMLScene*)')
+
+    self.computeDistanceButton = qt.QPushButton('Compute distance')
+    self.computeDistanceButton.connect("clicked()", self.onComputeDistanceButtonClicked)
+    distanceFormLayout.addRow(self.computeDistanceButton)
+
+    # Frame sliders for start and end points
+    self.startFrameSlider = ctk.ctkSliderWidget()
+    self.startFrameSlider.decimals = 0
+    self.startFrameSlider.connect('valueChanged(double)', self.startFrameSliderValueChanged)
+    distanceFormLayout.addRow("Startpoint ID:", self.startFrameSlider)
+
+    self.endFrameSlider = ctk.ctkSliderWidget()
+    self.endFrameSlider.decimals = 0
+    self.endFrameSlider.connect('valueChanged(double)', self.endFrameSliderValueChanged)
+    distanceFormLayout.addRow("Endpoint ID:", self.endFrameSlider)
+
+
+    # Textboxes to output the distance between the two points
+    self.distanceTextbox = qt.QLineEdit()
+    self.distanceTextbox.setReadOnly(True)
+    self.distanceTextbox.setFixedWidth(100)
+    distanceFormLayout.addRow("Distance along the curve (mm):", self.distanceTextbox)
+
+    # Textboxes to output values of calculated metrics
+    self.startMetricTextbox = qt.QLineEdit()
+    self.startMetricTextbox.setReadOnly(True)
+    self.startMetricTextbox.setFixedWidth(100)
+    distanceFormLayout.addRow("Startpoint metric:", self.startMetricTextbox)
+
+    self.endMetricTextbox = qt.QLineEdit()
+    self.endMetricTextbox.setReadOnly(True)
+    self.endMetricTextbox.setFixedWidth(100)
+    distanceFormLayout.addRow("Endpoint metric:", self.endMetricTextbox)
+
 
     # Add vertical spacer
     self.layout.addStretch(1)
@@ -300,6 +395,95 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     self.textNode.SetEncoding(3)
     slicer.mrmlScene.AddNode(self.textNode)
 
+  # ---------- Functions for distance between 2 points ---------- #
+
+  def onComputeDistanceButtonClicked(self):
+    centerline = self.centerlineNodeSelector.currentNode()
+    self.numPtsOnCenterline = centerline.GetPolyData().GetPointData().GetNumberOfTuples()
+
+    # Add color display to centerline
+    import vtk.util.numpy_support as VN
+    vtkMetricArray = centerline.GetPolyData().GetPointData().GetArray(3)
+    activeScalarName = centerline.GetPolyData().GetPointData().GetArrayName(3)
+    if vtkMetricArray is None:
+      vtkMetricArray = centerline.GetPolyData().GetPointData().GetArray('Radius')
+      activeScalarName = 'Radius'
+    self.distanceMetricArray = VN.vtk_to_numpy(vtkMetricArray)
+    print("current active scalar: ", activeScalarName)
+
+    # Display metric array colortable on centerline
+    display = slicer.vtkMRMLModelDisplayNode()
+    slicer.mrmlScene.AddNode( display )
+    display.SetLineWidth(4)
+    self.centerlineNodeSelector.currentNode().SetAndObserveDisplayNodeID( display.GetID() )
+    display.SetActiveScalarName(activeScalarName)
+    if activeScalarName == 'Radius' or activeScalarName == 'GlobalRelativeAngle':
+      display.SetAndObserveColorNodeID('vtkMRMLColorTableNodeFileHotToColdRainbow.txt')
+    else:
+      display.SetAndObserveColorNodeID('vtkMRMLColorTableNodeFileColdToHotRainbow.txt')
+    display.SetScalarVisibility(True)
+
+    # If optional bronchus model was included as input, display the model at low opacity
+    if self.optionalDistanceModelNodeSelector.currentNode() is not None:
+      bronchusDistanceDisplay = self.optionalDistanceModelNodeSelector.currentNode().GetDisplayNode()
+      bronchusDistanceDisplay.SetOpacity(0.4)
+
+    # Get coordinates of the selected start and end points on the centerline
+    startCoordinates = [0,0,0]
+    self.startpointNode = self.startFiducialsNodeSelector.currentNode()
+    self.startpointNode.GetNthFiducialPosition(0,startCoordinates)
+    endCoordinates = [0,0,0]
+    self.endpointNode = self.endFiducialsNodeSelector.currentNode()
+    self.endpointNode.GetNthFiducialPosition(0,endCoordinates)
+
+    self.centerlinePts = []
+    for i in range(self.numPtsOnCenterline):
+      pt = [0,0,0]
+      centerline.GetPolyData().GetPoint((self.numPtsOnCenterline-i), pt)
+      self.centerlinePts.append(pt)
+
+    startPtOnCenterline = self.findClosestPointOnCenterline(startCoordinates)
+    endPtOnCenterline = self.findClosestPointOnCenterline(endCoordinates)
+
+    startPtOnCenterlineID = self.centerlinePts.index(startPtOnCenterline)
+    endPtOnCenterlineID = self.centerlinePts.index(endPtOnCenterline)
+
+    # Calculate distance on the curve between the start and end points
+    self.computeDistance(startPtOnCenterlineID, endPtOnCenterlineID)
+
+    # Update frame slider ranges
+    self.startFrameSlider.maximum = centerline.GetPolyData().GetPointData().GetNumberOfTuples()
+    self.endFrameSlider.maximum = centerline.GetPolyData().GetPointData().GetNumberOfTuples()
+    self.startFrameSlider.minimum = 2
+    self.endFrameSlider.minimum = 2
+
+    # Change slider positions to the pt ID of the selected point on the centerline
+    self.startFrameSlider.value = startPtOnCenterlineID
+    self.endFrameSlider.value = endPtOnCenterlineID
+    self.startFrameSlider.connect('valueChanged(double)', self.startFrameSliderValueChanged)
+    self.endFrameSlider.connect('valueChanged(double)', self.endFrameSliderValueChanged)
+
+  def startFrameSliderValueChanged(self, newValue):
+    pt = self.centerlinePts[int(newValue)]
+    self.startpointNode.SetNthFiducialPosition(0, pt[0], pt[1], pt[2])
+    self.computeDistance(newValue, self.endFrameSlider.value)
+    self.startMetricTextbox.setText(round(self.distanceMetricArray[self.numPtsOnCenterline - int(newValue)],2))
+
+  def endFrameSliderValueChanged(self, newValue):
+    pt = self.centerlinePts[int(newValue)]
+    self.endpointNode.SetNthFiducialPosition(0, pt[0], pt[1], pt[2])
+    self.computeDistance(self.startFrameSlider.value, newValue)
+    self.endMetricTextbox.setText(round(self.distanceMetricArray[self.numPtsOnCenterline - int(newValue)],2))
+
+  def computeDistance(self, startID, endID):
+    # Calculate distance on the curve between the start and end points
+    cumulativeDistance = 0.0
+    for i in range(int(startID), int(endID)-1):
+      cumulativeDistance += np.linalg.norm(np.array(self.centerlinePts[i])-np.array(self.centerlinePts[i-1]))
+    self.distanceTextbox.setText(round(cumulativeDistance,2))
+
+      
+  # ------------------------------------------------------------- #
 
   def onScriptDirectoryButtonClicked(self):
     fileDialog = qt.QFileDialog()
@@ -463,7 +647,7 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     else:
       num_markups = markupsNode.GetNumberOfMarkups() #new
       # print("num_markups: ", num_markups)
-      if not newValue%100 == 0:
+      if not newValue%50 == 0:
         markupsNode.RemoveMarkup(num_markups-1)
       slicer.modules.markups.logic().AddFiducial(pt[0], pt[1], pt[2])
       
