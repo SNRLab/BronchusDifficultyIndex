@@ -342,6 +342,7 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
                         self.endFiducialsNodeSelector, 'setMRMLScene(vtkMRMLScene*)')
 
     self.computeDistanceButton = qt.QPushButton('Compute distance')
+    self.computeDistanceButton.setFixedWidth(190)
     self.computeDistanceButton.connect("clicked()", self.onComputeDistanceButtonClicked)
     distanceFormLayout.addRow(self.computeDistanceButton)
 
@@ -374,6 +375,25 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     self.endMetricTextbox.setFixedWidth(100)
     distanceFormLayout.addRow("Endpoint metric:", self.endMetricTextbox)
 
+    # Output Directory selector
+    self.distanceOutputDirectory = ''
+    self.distanceOutputDirectoryButton = qt.QPushButton('Select Output Directory')
+    self.distanceOutputDirectoryButton.toolTip = "Click to change the output directory."
+    self.distanceOutputDirectoryButton.connect("clicked()", self.onDistanceOutputDirectoryClicked)
+    distanceFormLayout.addRow("Distance output directory:", self.distanceOutputDirectoryButton)
+
+    # Output filename
+    self.distanceOutputFilenameTextbox = qt.QLineEdit("")
+    self.distanceOutputFilenameTextbox.setReadOnly(False)
+    self.distanceOutputFilenameTextbox.setFixedWidth(200)
+    distanceFormLayout.addRow("Distance output file name:", self.distanceOutputFilenameTextbox)
+
+    # Button to save distance data to .txt file
+    self.saveDistanceButton = qt.QPushButton('Save distance data')
+    self.saveDistanceButton.setFixedWidth(190)
+    self.saveDistanceButton.connect("clicked()", self.onSaveDistanceButtonClicked)
+    distanceFormLayout.addRow(self.saveDistanceButton)
+
 
     # Add vertical spacer
     self.layout.addStretch(1)
@@ -396,6 +416,35 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
     slicer.mrmlScene.AddNode(self.textNode)
 
   # ---------- Functions for distance between 2 points ---------- #
+
+  def onDistanceOutputDirectoryClicked(self):
+    fileDialog = qt.QFileDialog()
+    self.distanceOutputDirectory = fileDialog.getExistingDirectory( None, 'Select Output Directory', self.distanceOutputDirectory )
+
+  def onSaveDistanceButtonClicked(self):
+
+    print("here")
+
+    from sys import platform
+
+    if self.distanceOutputDirectory != '':
+      cumulativeDistance = 0.0
+      dir = self.distanceOutputDirectory
+      print("dir: ", dir)
+
+      distanceOutputFilename = self.distanceOutputFilenameTextbox.text
+
+      if platform == 'win32':
+        fileName = dir + "\\" + distanceOutputFilename + ".txt"
+      else:
+        fileName = dir + "/" + distanceOutputFilename + ".txt"
+
+      with open(fileName,"w") as f:
+        print("f: ", f)
+        for i in range(int(self.startFrameSlider.value), int(self.endFrameSlider.value)+1):
+          thisDistance = np.linalg.norm(np.array(self.centerlinePts[i])-np.array(self.centerlinePts[i-1]))
+          cumulativeDistance += thisDistance
+          f.write(str(i) + ',' + str(thisDistance) + ',' + str(cumulativeDistance) + ',' + str(round(self.distanceMetricArray[self.numPtsOnCenterline - int(i)],2)) + '\n')
 
   def onComputeDistanceButtonClicked(self):
     centerline = self.centerlineNodeSelector.currentNode()
@@ -478,7 +527,7 @@ class CenterlineSliderWidget(ScriptedLoadableModuleWidget):
   def computeDistance(self, startID, endID):
     # Calculate distance on the curve between the start and end points
     cumulativeDistance = 0.0
-    for i in range(int(startID), int(endID)-1):
+    for i in range(int(startID), int(endID)+1):
       cumulativeDistance += np.linalg.norm(np.array(self.centerlinePts[i])-np.array(self.centerlinePts[i-1]))
     self.distanceTextbox.setText(round(cumulativeDistance,2))
 
