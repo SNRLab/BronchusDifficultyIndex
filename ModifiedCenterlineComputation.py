@@ -131,34 +131,34 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
     self.colorByCumulativeIndexCheckbox.toolTip = "Toggle whether or not to overlay a colormap of the cumulative difficulty index onto the centerline."
     inputsFormLayout.addRow("Color by Cumulative Difficulty Index (CDI): ", self.colorByCumulativeIndexCheckbox)
 
-    # Allow the user to input scalar multiplier values for the threshold, default to 1.0 for all of them
-    textLine = qt.QLabel()
-    textLine.setText("Indicate scalar multiplier values for Total/Cumulative Index calculations:")
-    inputsFormLayout.addWidget(textLine)
+    # # Allow the user to input scalar multiplier values for the threshold, default to 1.0 for all of them
+    # textLine = qt.QLabel()
+    # textLine.setText("Indicate scalar multiplier values for Total/Cumulative Index calculations:")
+    # inputsFormLayout.addWidget(textLine)
 
-    # Radius
-    self.radiusScalarTextbox = qt.QLineEdit("1.0")
-    self.radiusScalarTextbox.setReadOnly(False)
-    self.radiusScalarTextbox.setFixedWidth(75)
-    inputsFormLayout.addRow("Radius scalar multiplier:", self.radiusScalarTextbox)
+    # # Radius
+    # self.radiusScalarTextbox = qt.QLineEdit("1.0")
+    # self.radiusScalarTextbox.setReadOnly(False)
+    # self.radiusScalarTextbox.setFixedWidth(75)
+    # inputsFormLayout.addRow("Radius scalar multiplier:", self.radiusScalarTextbox)
 
-    # Local curvature
-    self.localCurvatureScalarTextbox = qt.QLineEdit("1.0")
-    self.localCurvatureScalarTextbox.setReadOnly(False)
-    self.localCurvatureScalarTextbox.setFixedWidth(75)
-    inputsFormLayout.addRow("Local curvature scalar multiplier:", self.localCurvatureScalarTextbox)
+    # # Local curvature
+    # self.localCurvatureScalarTextbox = qt.QLineEdit("1.0")
+    # self.localCurvatureScalarTextbox.setReadOnly(False)
+    # self.localCurvatureScalarTextbox.setFixedWidth(75)
+    # inputsFormLayout.addRow("Local curvature scalar multiplier:", self.localCurvatureScalarTextbox)
 
-    # Global relative angle 
-    self.angleScalarTextbox = qt.QLineEdit("1.0")
-    self.angleScalarTextbox.setReadOnly(False)
-    self.angleScalarTextbox.setFixedWidth(75)
-    inputsFormLayout.addRow("Global relevative angle scalar multiplier:", self.angleScalarTextbox)
+    # # Global relative angle 
+    # self.angleScalarTextbox = qt.QLineEdit("1.0")
+    # self.angleScalarTextbox.setReadOnly(False)
+    # self.angleScalarTextbox.setFixedWidth(75)
+    # inputsFormLayout.addRow("Global relevative angle scalar multiplier:", self.angleScalarTextbox)
 
-    # Curvature rate
-    self.curvatureRateScalarTextbox = qt.QLineEdit("1.0")
-    self.curvatureRateScalarTextbox.setReadOnly(False)
-    self.curvatureRateScalarTextbox.setFixedWidth(75)
-    inputsFormLayout.addRow("Rate of curvature scalar multiplier:", self.curvatureRateScalarTextbox)
+    # # Curvature rate
+    # self.curvatureRateScalarTextbox = qt.QLineEdit("1.0")
+    # self.curvatureRateScalarTextbox.setReadOnly(False)
+    # self.curvatureRateScalarTextbox.setFixedWidth(75)
+    # inputsFormLayout.addRow("Rate of curvature scalar multiplier:", self.curvatureRateScalarTextbox)
 
     # Use a QButton group to make checkboxes exclusive
     self.group = qt.QButtonGroup()
@@ -235,8 +235,14 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
     self.outputFilenameTextbox = qt.QLineEdit("")
     self.outputFilenameTextbox.setReadOnly(False)
     self.outputFilenameTextbox.setFixedWidth(200)
-    outputsFormLayout.addRow("Output File Name (ex. Case4_CDI):", self.outputFilenameTextbox)
+    outputsFormLayout.addRow("Output File Name:", self.outputFilenameTextbox)
     
+    # Output filename
+    self.minMaxOutputFilenameTextbox = qt.QLineEdit("")
+    self.minMaxOutputFilenameTextbox.setReadOnly(False)
+    self.minMaxOutputFilenameTextbox.setFixedWidth(200)
+    outputsFormLayout.addRow("Min/max Output File Name:", self.minMaxOutputFilenameTextbox)
+
     # Remove first point selector
     self.removeFirstPointCheckbox = qt.QCheckBox()
     self.removeFirstPointCheckbox.toolTip = "Toggle whether or not the first point should be removed."
@@ -313,7 +319,8 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
 
     # compress the layout
     self.layout.addStretch(1)
-    
+
+
   def onMRMLSceneChanged(self):
     logging.debug("onMRMLSceneChanged")
 
@@ -348,12 +355,13 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
     logging.debug("Starting Centerline Computation..")
 
     # Determine scalar multiplier values from user input
-    radiusScalar = float(self.radiusScalarTextbox.text)
-    localCurvatureScalar = float(self.localCurvatureScalarTextbox.text)
-    globalAngleScalar = float(self.angleScalarTextbox.text)
-    curvatureRateScalar = float(self.curvatureRateScalarTextbox.text)
+    # radiusScalar = float(self.radiusScalarTextbox.text)
+    # localCurvatureScalar = float(self.localCurvatureScalarTextbox.text)
+    # globalAngleScalar = float(self.angleScalarTextbox.text)
+    # curvatureRateScalar = float(self.curvatureRateScalarTextbox.text)
 
     outputFilename = self.outputFilenameTextbox.text
+    minMaxOutputFilename = self.minMaxOutputFilenameTextbox.text
 
     # first we need the nodes
     currentModelNode = self.inputModelNodeSelector.currentNode()
@@ -745,10 +753,10 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
             if self.colorByLocalCurvatureCheckbox.isChecked() or self.colorByTotalIndexCheckbox.isChecked() or self.colorByCumulativeIndexCheckbox.isChecked():
               # Calculate curvature here
               # if j >= 50 and j < (cell.GetNumberOfPoints() - 50):
-              if pt_id >= 30 and pt_id < (localcurvature_array.GetMaxId()-30):
+              if pt_id >= 10 and pt_id < (localcurvature_array.GetMaxId()-10):
                 curr_pt = np.array([float(s) for s in (str( cell_points.GetPoint(j) ).replace(' ','')[1:-1]).split(',')])
-                prev_pt = np.array([float(s) for s in (str( cell_points.GetPoint(j-30) ).replace(' ','')[1:-1]).split(',')])
-                next_pt = np.array([float(s) for s in (str( cell_points.GetPoint(j+30) ).replace(' ','')[1:-1]).split(',')])
+                prev_pt = np.array([float(s) for s in (str( cell_points.GetPoint(j-10) ).replace(' ','')[1:-1]).split(',')])
+                next_pt = np.array([float(s) for s in (str( cell_points.GetPoint(j+10) ).replace(' ','')[1:-1]).split(',')])
 
                 # Triangle Lengths
                 a = np.linalg.norm(next_pt - prev_pt) #a = c-b
@@ -767,7 +775,7 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
                 if pt_id <= localcurvature_array.GetMaxId() and not np.isnan(local_curvature):
                   localcurvature_array.SetValue(pt_id, local_curvature)
 
-              if 0 <= pt_id <= 31 or (localcurvature_array.GetMaxId()-30) <= pt_id <= localcurvature_array.GetMaxId():
+              if 0 <= pt_id <= 11 or (localcurvature_array.GetMaxId()-10) <= pt_id <= localcurvature_array.GetMaxId():
                 localcurvature_array.SetValue(pt_id, 0.0)
 
                 #else:
@@ -889,7 +897,7 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
                   if threshold_pass_count >= 100:
                     reference_vector = current_vector
                     threshold_pass_count = 0
-                    #newPlane = True
+                    newPlane = True
                     print("PASSED THE THRESHOLD")
                 else:
                   threshold_pass_count = 0
@@ -901,13 +909,13 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
 
                 # Add plane rotation value to the array
                 if pt_id <= planerotation_array.GetMaxId():
-                  if not np.isnan(planerotation_angle) and not planerotation_angle > 1.58 and not planerotation_angle < -1.58:
+                  if not planerotation_angle > 1.58 and not planerotation_angle < -1.58:
                     planerotation_array.SetValue(pt_id, np.abs(planerotation_angle))
                   else:
                     planerotation_array.SetValue(pt_id, 0.0)
 
               if 0 <= pt_id <= 15 or (planerotation_array.GetMaxId()-15) <= pt_id <= planerotation_array.GetMaxId():
-                planerotationangle_array.SetValue(pt_id, 0.0)
+                planerotation_array.SetValue(pt_id, 0.0)
 
 
             if self.colorByCurvatureRateCheckbox.isChecked() or self.colorByTotalIndexCheckbox.isChecked() or self.colorByCumulativeIndexCheckbox.isChecked():
@@ -928,12 +936,10 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
                 R = a*b*c / 4 / np.sqrt(s * (s - a) * (s - b) * (s - c))
                 curvature_rate = 1.0/R * 2550
 
-                #if j == (cell.GetNumberOfPoints() - 199):
                 if pt_id <= (curvaturerate_array.GetMaxId()-200):
                   saved_curvature_rate = curvature_rate
-                  print ("saved_curvature_rate: ", saved_curvature_rate)
+                  #print ("saved_curvature_rate: ", saved_curvature_rate)
 
-                #if pt_id <= globalrelativeangle_array.GetMaxId() and not np.isnan(curvature_rate):
                 if pt_id <= curvaturerate_array.GetMaxId() and not np.isnan(curvature_rate):
                   curvaturerate_array.SetValue(pt_id, curvature_rate)
 
@@ -941,12 +947,13 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
                 if curvature_rate > max_curvrate: max_curvrate = curvature_rate
                 elif curvature_rate < min_curvrate: min_curvrate = curvature_rate
 
-              #if (cell.GetNumberOfPoints() - 200)<j<(cell.GetNumberOfPoints()):
-              #elif (curvaturerate_array.GetMaxId()-200)<pt_id<curvaturerate_array.GetMaxId():
               elif pt_id < curvaturerate_array.GetMaxId():
                 curvaturerate_array.SetValue(pt_id, saved_curvature_rate)
 
               if 0 <= pt_id <= 200:
+                curvaturerate_array.SetValue(pt_id, 0.0)
+
+              if ((curvaturerate_array.GetMaxId()-200) <= pt_id <= curvaturerate_array.GetMaxId()):
                 curvaturerate_array.SetValue(pt_id, 0.0)
 
       if self.colorByTotalIndexCheckbox.isChecked() or self.colorByCumulativeIndexCheckbox.isChecked():
@@ -988,6 +995,7 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
         radius_array = numpy_to_vtk(radius_array)
         localcurvature_array = numpy_to_vtk(localcurvature_array)
         globalrelativeangle_array = numpy_to_vtk(globalrelativeangle_array)
+        planerotation_array = numpy_to_vtk(planerotation_array)
         curvaturerate_array = numpy_to_vtk(curvaturerate_array)
         totalindex_array = numpy_to_vtk(totalindex_array)
 
@@ -1177,25 +1185,69 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
                   if self.colorByCurvatureRateCheckbox.isChecked():
                     pt_write = curvaturerate_array.GetValue(pt_id)
                   if self.colorByTotalIndexCheckbox.isChecked():
-                    #pt_write = totalindex_array.GetValue(pt_id)
                     pt_1 = radius_array.GetValue(pt_id)
                     pt_2 = localcurvature_array.GetValue(pt_id)
                     pt_3 = globalrelativeangle_array.GetValue(pt_id)
-                    pt_4 = curvaturerate_array.GetValue(pt_id)
-                    pt_5 = totalindex_array.GetValue(pt_id)
-                    pt_write = str(pt_1) + ',' + str(pt_2) + ',' + str(pt_3) + ',' + str(pt_4) + ',' + str(pt_5)
-                  if self.colorByCumulativeIndexCheckbox.isChecked():
-                    #pt_write = cumulativeindex_array.GetValue(pt_id)
-                    pt_1 = radius_array.GetValue(pt_id)
-                    pt_2 = localcurvature_array.GetValue(pt_id)
-                    pt_3 = globalrelativeangle_array.GetValue(pt_id)
-                    pt_4 = curvaturerate_array.GetValue(pt_id)
-                    pt_5 = totalindex_array.GetValue(pt_id)
-                    pt_6 = cumulativeindex_array.GetValue(pt_id)
+                    pt_4 = planerotation_array.GetValue(pt_id)
+                    pt_5 = curvaturerate_array.GetValue(pt_id)
+                    pt_6 = totalindex_array.GetValue(pt_id)
+                    
+                    if pt_1 == 0.0: 
+                      pt_1 = float("NaN")
+                    if pt_2 == 0.0: 
+                      pt_2 = float("NaN")
+                    if pt_3 == 0.0: 
+                      pt_3 = float("NaN")
+                    if pt_4 == 0.0: 
+                      pt_4 = float("NaN")
+                    if pt_5 == 0.0: 
+                      pt_5 = float("NaN")
+
                     pt_write = str(pt_1) + ',' + str(pt_2) + ',' + str(pt_3) + ',' + str(pt_4) + ',' + str(pt_5) + ',' + str(pt_6)
+
+                  if self.colorByCumulativeIndexCheckbox.isChecked():
+                    pt_1 = radius_array.GetValue(pt_id)
+                    pt_2 = localcurvature_array.GetValue(pt_id)
+                    pt_3 = globalrelativeangle_array.GetValue(pt_id)
+                    pt_4 = planerotation_array.GetValue(pt_id)
+                    pt_5 = curvaturerate_array.GetValue(pt_id)
+                    pt_6 = totalindex_array.GetValue(pt_id)
+                    pt_7 = cumulativeindex_array.GetValue(pt_id)
+                    
+                    if pt_1 == 0.0: 
+                      pt_1 = float("NaN")
+                    if pt_2 == 0.0: 
+                      pt_2 = float("NaN")
+                    if pt_3 == 0.0: 
+                      pt_3 = float("NaN")
+                    if pt_4 == 0.0: 
+                      pt_4 = float("NaN")
+                    if pt_5 == 0.0: 
+                      pt_5 = float("NaN")
+
+                    pt_write = str(pt_1) + ',' + str(pt_2) + ',' + str(pt_3) + ',' + str(pt_4) + ',' + str(pt_5) + ',' + str(pt_6) + ',' + str(pt_7)
 
                   f.write( str(pt_id) + ',' + pt_str + ',' + str( pt_write ) + '\n' )
 
+      # Write minimum and maximum metric values to another file
+      if self.outputDirectory != '' and minMaxOutputFilename != '':
+        if self.colorByTotalIndexCheckbox.isChecked() or self.colorByCumulativeIndexCheckbox.isChecked():
+          if platform == 'win32':
+            minMaxOutputFilename = "\\" + minMaxOutputFilename + ".txt"
+          else: # else if the OS is Linux or Mac
+            minMaxOutputFilename = "/" + minMaxOutputFilename + ".txt"
+
+          with open(dir + minMaxOutputFilename,"w") as f:
+            f.write ("max radius" + ',' + str(max_radius) + '\n')
+            f.write ("min radius" + ',' + str(min_radius) + '\n')
+            f.write ("max local curvature" + ',' + str(max_localcurv) + '\n')
+            f.write ("min local curvature" + ',' + str(min_localcurv) + '\n')
+            f.write ("max global relative angle" + ',' + str(max_globalangle) + '\n')
+            f.write ("min global relative angle" + ',' + str(min_globalangle) + '\n')
+            f.write ("max plane rotation" + ',' + str(max_planerotation) + '\n')
+            f.write ("min plane rotation" + ',' + str(min_planerotation) + '\n')
+            f.write ("max curvature rate" + ',' + str(max_curvrate) + '\n')
+            f.write ("min curvature rate" + ',' + str(min_curvrate) + '\n')
 
     # if pathfindingMode:
     #   centerlineModel = slicer.util.getNode('currentOutputModelNode')
@@ -1224,25 +1276,6 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
       display.SetActiveScalarName('Radius')
       display.SetAndObserveColorNodeID('vtkMRMLColorTableNodeFileHotToColdRainbow.txt')
       display.SetScalarVisibility(True)
-
-      # if not preview: 
-      #   # Print the max and min values of the radius
-      #   view=slicer.app.layoutManager().threeDWidget(0).threeDView()
-      #   view.cornerAnnotation().SetText(vtk.vtkCornerAnnotation.UpperRight,"Max value: " + str(max_radius))
-      #   view.cornerAnnotation().SetText(vtk.vtkCornerAnnotation.UpperLeft,"Min value: " + str(min_radius))
-      #   view.cornerAnnotation().GetTextProperty().SetColor(0,0,0)
-      #   view.forceRender()
-
-      #### CURRENT BEST SHOT for colortable
-      # https://github.com/Slicer/Slicer/blob/master/Modules/Loadable/Colors/Testing/Python/ColorsScalarBarSelfTest.py
-      
-      # colorWidget = slicer.modules.colors.widgetRepresentation()
-      # ctkScalarBarWidget = slicer.util.findChildren(colorWidget, name='VTKScalarBar')[0]
-      # ctkScalarBarWidget.setDisplay(1)
-      
-      # activeColorNodeSelector = slicer.util.findChildren(colorWidget, 'ColorTableComboBox')[0]
-      # activeColorNodeSelector.setCurrentNodeID('vtkMRMLColorTableNodeFileColdToHotRainbow.txt')
-      ########
 
     elif self.colorByLocalCurvatureCheckbox.isChecked():
       # https://gist.github.com/ungi/c1c448fa51cc458d3da75f5e5c73c74c
