@@ -131,6 +131,18 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
     self.colorByCumulativeIndexCheckbox.toolTip = "Toggle whether or not to overlay a colormap of the cumulative difficulty index onto the centerline."
     inputsFormLayout.addRow("Color by Cumulative Difficulty Index (CDI): ", self.colorByCumulativeIndexCheckbox)
 
+    # Modify range of points used to calculate local curvature
+    self.localCurvatureRangeTextbox = qt.QLineEdit("30")
+    self.localCurvatureRangeTextbox.setReadOnly(False)
+    self.localCurvatureRangeTextbox.setFixedWidth(40)
+    inputsFormLayout.addRow("# points for LC calculation: +/-", self.localCurvatureRangeTextbox)
+
+    # Modify range of points used to calculate rate of curvature
+    self.curvatureRateRangeTextbox = qt.QLineEdit("200")
+    self.curvatureRateRangeTextbox.setReadOnly(False)
+    self.curvatureRateRangeTextbox.setFixedWidth(40)
+    inputsFormLayout.addRow("# points for RoC calculation: +/-", self.curvatureRateRangeTextbox)
+
     # # Allow the user to input scalar multiplier values for the threshold, default to 1.0 for all of them
     # textLine = qt.QLabel()
     # textLine.setText("Indicate scalar multiplier values for Total/Cumulative Index calculations:")
@@ -362,6 +374,8 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
 
     outputFilename = self.outputFilenameTextbox.text
     minMaxOutputFilename = self.minMaxOutputFilenameTextbox.text
+    localCurveRangeVal = int(self.localCurvatureRangeTextbox.text)
+    curvatureRateRangeVal = int(self.curvatureRateRangeTextbox.text)
 
     # first we need the nodes
     currentModelNode = self.inputModelNodeSelector.currentNode()
@@ -753,10 +767,10 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
             if self.colorByLocalCurvatureCheckbox.isChecked() or self.colorByTotalIndexCheckbox.isChecked() or self.colorByCumulativeIndexCheckbox.isChecked():
               # Calculate curvature here
               # if j >= 50 and j < (cell.GetNumberOfPoints() - 50):
-              if pt_id >= 10 and pt_id < (localcurvature_array.GetMaxId()-10):
+              if pt_id >= localCurveRangeVal and pt_id < (localcurvature_array.GetMaxId()-localCurveRangeVal):
                 curr_pt = np.array([float(s) for s in (str( cell_points.GetPoint(j) ).replace(' ','')[1:-1]).split(',')])
-                prev_pt = np.array([float(s) for s in (str( cell_points.GetPoint(j-10) ).replace(' ','')[1:-1]).split(',')])
-                next_pt = np.array([float(s) for s in (str( cell_points.GetPoint(j+10) ).replace(' ','')[1:-1]).split(',')])
+                prev_pt = np.array([float(s) for s in (str( cell_points.GetPoint(j-localCurveRangeVal) ).replace(' ','')[1:-1]).split(',')])
+                next_pt = np.array([float(s) for s in (str( cell_points.GetPoint(j+localCurveRangeVal) ).replace(' ','')[1:-1]).split(',')])
 
                 # Triangle Lengths
                 a = np.linalg.norm(next_pt - prev_pt) #a = c-b
@@ -775,7 +789,7 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
                 if pt_id <= localcurvature_array.GetMaxId() and not np.isnan(local_curvature):
                   localcurvature_array.SetValue(pt_id, local_curvature)
 
-              if 0 <= pt_id <= 11 or (localcurvature_array.GetMaxId()-10) <= pt_id <= localcurvature_array.GetMaxId():
+              if 0 <= pt_id <= (localCurveRangeVal+1) or (localcurvature_array.GetMaxId()-localCurveRangeVal) <= pt_id <= localcurvature_array.GetMaxId():
                 localcurvature_array.SetValue(pt_id, 0.0)
 
                 #else:
@@ -797,7 +811,8 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
                   direction = (next_pt - curr_pt)/np.linalg.norm(next_pt - curr_pt)
 
                 # Determine similarity to trachea_vector via dot product:
-                globalrelativeangle_similiarity = np.dot(direction, trachea_vector)
+                globalrelativeangle_similiarity = np.arccos(np.dot(direction, trachea_vector))
+                #globalrelativeangle_similiarity = np.dot(direction, trachea_vector)
 
                 # Track min and max values
                 if globalrelativeangle_similiarity > max_globalangle: max_globalangle = globalrelativeangle_similiarity
@@ -894,6 +909,7 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
                   threshold_pass_count += 1
                   newPlane = False
                   # Once the threshold has been passed 100 times in a row, update reference vector
+                  # if threshold_pass_count >= 100:
                   if threshold_pass_count >= 100:
                     reference_vector = current_vector
                     threshold_pass_count = 0
@@ -922,7 +938,7 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
               # Calculate rate of curvature, or overall angle change within a certain amount of distance
 
               #if j >= 200 and j < (cell.GetNumberOfPoints() - 200):
-              if pt_id >= 200 and pt_id < (curvaturerate_array.GetMaxId()-200):
+              if pt_id >= curvatureRateRangeVal and pt_id < (curvaturerate_array.GetMaxId()-curvatureRateRangeVal):
                 curr_pt = np.array([float(s) for s in (str( cell_points.GetPoint(j) ).replace(' ','')[1:-1]).split(',')])
                 prev_pt = np.array([float(s) for s in (str( cell_points.GetPoint(j-150) ).replace(' ','')[1:-1]).split(',')])
                 next_pt = np.array([float(s) for s in (str( cell_points.GetPoint(j+150) ).replace(' ','')[1:-1]).split(',')])
@@ -936,7 +952,7 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
                 R = a*b*c / 4 / np.sqrt(s * (s - a) * (s - b) * (s - c))
                 curvature_rate = 1.0/R * 2550
 
-                if pt_id <= (curvaturerate_array.GetMaxId()-200):
+                if pt_id <= (curvaturerate_array.GetMaxId()-curvatureRateRangeVal):
                   saved_curvature_rate = curvature_rate
                   #print ("saved_curvature_rate: ", saved_curvature_rate)
 
@@ -950,10 +966,10 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
               elif pt_id < curvaturerate_array.GetMaxId():
                 curvaturerate_array.SetValue(pt_id, saved_curvature_rate)
 
-              if 0 <= pt_id <= 200:
+              if 0 <= pt_id <= curvatureRateRangeVal:
                 curvaturerate_array.SetValue(pt_id, 0.0)
 
-              if ((curvaturerate_array.GetMaxId()-200) <= pt_id <= curvaturerate_array.GetMaxId()):
+              if ((curvaturerate_array.GetMaxId()-curvatureRateRangeVal) <= pt_id <= curvaturerate_array.GetMaxId()):
                 curvaturerate_array.SetValue(pt_id, 0.0)
 
       if self.colorByTotalIndexCheckbox.isChecked() or self.colorByCumulativeIndexCheckbox.isChecked():
@@ -1086,7 +1102,6 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
         self.maxPlaneRotationTextbox.setText(max_planerotation)
         self.minPlaneRotationTextbox.setText(min_planerotation)
 
-
       if self.colorByCurvatureRateCheckbox.isChecked():
         network.GetPointData().AddArray(curvaturerate_array)
         self.maxCurvRateTextbox.setText(round(np.amax(curvaturerate_array),2))
@@ -1119,30 +1134,7 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
 
 
       # Write the points for each path to a file
-      # ORIGINAL:
-      # if self.outputDirectory != '':
-      #   for i in range( network.GetNumberOfCells() ):
-      #     # Iterate through each cell
-      #     cell = network.GetCell(i)
-      #     cell_ids = cell.GetPointIds()
-      #     cell_points = cell.GetPoints()
-
-      #     if cell.GetNumberOfPoints() > 100:
-      #       dir = self.outputDirectory + "\\Branch " + str(i)
-      #       if not os.path.exists(dir):
-      #         os.makedirs(dir)
-      #       with open(dir + "\\raw_data.txt","w") as f:
-          
-      #         for j in range( cell.GetNumberOfPoints() ):
-      #           pt_str = str( cell_points.GetPoint(j) ).replace(' ','')[1:-1]
-      #           pt_id = cell_ids.GetId(j)
-      #           if 0 <= pt_id and pt_id < radius_array.GetNumberOfValues()-1:
-      #             pt_r = radius_array.GetValue( pt_id )
-      #             f.write( pt_str + ',' + str( pt_r ) + '\n' )
-
-      # MODIFIED FOR MASA:
       from sys import platform
-
       if self.outputDirectory != '':
         for i in range( network.GetNumberOfCells() ):
           # Iterate through each cell
@@ -1249,20 +1241,81 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
             f.write ("max curvature rate" + ',' + str(max_curvrate) + '\n')
             f.write ("min curvature rate" + ',' + str(min_curvrate) + '\n')
 
-    # if pathfindingMode:
-    #   centerlineModel = slicer.util.getNode('currentOutputModelNode')
-    #   centerlinePoly = centerlineModel.GetPolyData()
+    # ---------------------------------- Color Table Node ------------------------------------------
 
-    #   for i in range (centerlinePoly.GetNumberOfPoints()):
-    #     currentPoint = centerlinePoly.GetPoints().GetPoint(i)
-    #     if currentPoint == currentCoordinatesROI:
-    #       print ("point found!")
-    #       print (currentPoint + "   ")
-    #       print (currentCoordinatesROI)
-    #       currentId = centerlinePoly.GetPoints().GetId(i)
-    #       print (currentId)
+    if not preview: 
+        labelsFormat = "%2.1f"
 
+        # Create color node
+        colorNode = slicer.mrmlScene.CreateNodeByClass("vtkMRMLProceduralColorNode")
+        colorNode.UnRegister(None)
+        colorNode.SetName(slicer.mrmlScene.GenerateUniqueName(""))
+        colorNode.SetAttribute("Category", "MyModule")
+        colorNode.SetHideFromEditors(False)
+        slicer.mrmlScene.AddNode(colorNode)
 
+        # Specify colormap based on selected metric
+        if self.colorByRadiusCheckbox.isChecked(): # MINIMUM IS RED, MAXIMUM IS BLUE
+            colorTableRangeMaximum = max_radius
+            colorTableRangeMinimum = min_radius
+            colorMap = colorNode.GetColorTransferFunction()
+            colorMap.RemoveAllPoints()
+            colorMap.AddRGBPoint(colorTableRangeMinimum, 1.0, 0.0, 0.0)
+            colorMap.AddRGBPoint((colorTableRangeMaximum-0.2*colorTableRangeMaximum), 0.0, 1.0, 1.0)
+            colorMap.AddRGBPoint((colorTableRangeMaximum+colorTableRangeMinimum)/2.0, 1.0, 1.0, 0.0)
+            colorMap.AddRGBPoint(colorTableRangeMaximum, 0.0, 0.0, 1.0)
+            colorMapTitle = "Radius (mm)"
+        elif self.colorByLocalCurvatureCheckbox.isChecked(): # MINIMUM IS BLUE, MAXIMUM IS RED
+            colorTableRangeMaximum = max_localcurv
+            colorTableRangeMinimum = min_localcurv
+            colorMap = colorNode.GetColorTransferFunction()
+            colorMap.RemoveAllPoints()
+            colorMap.AddRGBPoint(colorTableRangeMinimum, 0.0, 0.0, 1.0)
+            colorMap.AddRGBPoint((colorTableRangeMaximum*0.2+colorTableRangeMinimum), 0.0, 1.0, 1.0)
+            colorMap.AddRGBPoint((colorTableRangeMaximum+colorTableRangeMinimum)/2.0, 1.0, 1.0, 0.0)
+            colorMap.AddRGBPoint(colorTableRangeMaximum, 1.0, 0.0, 0.0)
+            colorMapTitle = "Local Curvature (1/mm)"
+        elif self.colorByGlobalRelativeAngleCheckbox.isChecked(): # MINIMUM IS BLUE, MAXIMUM IS RED
+            colorTableRangeMaximum = max_globalangle
+            colorTableRangeMinimum = min_globalangle
+            colorMap = colorNode.GetColorTransferFunction()
+            colorMap.RemoveAllPoints()
+            colorMap.AddRGBPoint(colorTableRangeMinimum, 0.0, 0.0, 1.0)
+            colorMap.AddRGBPoint((colorTableRangeMaximum*0.2+colorTableRangeMinimum), 0.0, 1.0, 1.0)
+            colorMap.AddRGBPoint((colorTableRangeMaximum+colorTableRangeMinimum)/2.0, 1.0, 1.0, 0.0)
+            colorMap.AddRGBPoint(colorTableRangeMaximum, 1.0, 0.0, 0.0)
+            colorMapTitle = "Global Relative Angle (rad)"
+        elif self.colorByPlaneRotationCheckbox.isChecked(): # MINIMUM IS BLUE, MAXIMUM IS RED
+            colorTableRangeMaximum = max_planerotation
+            colorTableRangeMinimum = min_planerotation
+            colorMap = colorNode.GetColorTransferFunction()
+            colorMap.RemoveAllPoints()
+            colorMap.AddRGBPoint(colorTableRangeMinimum, 0.0, 0.0, 1.0)
+            colorMap.AddRGBPoint((colorTableRangeMaximum*0.2+colorTableRangeMinimum), 0.0, 1.0, 1.0)
+            colorMap.AddRGBPoint((colorTableRangeMaximum+colorTableRangeMinimum)/2.0, 1.0, 1.0, 0.0)
+            colorMap.AddRGBPoint(colorTableRangeMaximum, 1.0, 0.0, 0.0)
+            colorMapTitle = "Plane Rotation (rad)"
+        elif self.colorByCurvatureRateCheckbox.isChecked():
+            colorTableRangeMaximum = max_curvrate
+            colorTableRangeMinimum = min_curvrate
+            colorMap = colorNode.GetColorTransferFunction()
+            colorMap.RemoveAllPoints()
+            colorMap.AddRGBPoint(colorTableRangeMinimum, 0.0, 0.0, 1.0)
+            colorMap.AddRGBPoint((colorTableRangeMaximum*0.2+colorTableRangeMinimum), 0.0, 1.0, 1.0)
+            colorMap.AddRGBPoint((colorTableRangeMaximum+colorTableRangeMinimum)/2.0, 1.0, 1.0, 0.0)
+            colorMap.AddRGBPoint(colorTableRangeMaximum, 1.0, 0.0, 0.0)
+            colorMapTitle = "Rate of Curvature (1/mm)"
+
+        # Display color scalar bar
+        colorWidget = slicer.modules.colors.widgetRepresentation()
+        colorWidget.setCurrentColorNode(colorNode)
+        ctkScalarBarWidget = slicer.util.findChildren(colorWidget, name="VTKScalarBar")[0]
+        ctkScalarBarWidget.setDisplay(1)
+        ctkScalarBarWidget.setMaxNumberOfColors(256)
+        ctkScalarBarWidget.setLabelsFormat(labelsFormat)
+        ctkScalarBarWidget.setTitle(colorMapTitle)
+
+    # ----------------------------------------------------------------------------
 
     if self.colorByRadiusCheckbox.isChecked():
       # https://gist.github.com/ungi/c1c448fa51cc458d3da75f5e5c73c74c
@@ -1357,8 +1410,6 @@ class ModifiedCenterlineComputationWidget(ScriptedLoadableModuleWidget):
 
     else:
       currentOutputModelNode.SetAndObservePolyData(network)
-
-
 
     # Make model node semi-transparent to make centerline inside visible
     currentModelNode.CreateDefaultDisplayNodes()
